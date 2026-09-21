@@ -5,6 +5,8 @@ usage() {
   cat <<EOF
 Usage: $(basename "$0") <variant>
 
+Uninstalls the Helm release and deletes the variant namespace.
+
 Variants:
   lemonade | coffee | cafe | mate | piscola | cafept | cachaca
 EOF
@@ -53,10 +55,20 @@ case "${variant}" in
     ;;
 esac
 
+delete_namespace() {
+  local ns="$1"
+  if command -v oc >/dev/null 2>&1; then
+    oc delete namespace "${ns}" --wait=false
+  elif command -v kubectl >/dev/null 2>&1; then
+    kubectl delete namespace "${ns}" --wait=false
+  else
+    echo "Warning: oc/kubectl not found; namespace ${ns} was not deleted" >&2
+    return 1
+  fi
+}
+
 echo "Uninstalling release=${RELEASE} namespace=${NS}"
 helm uninstall "${RELEASE}" -n "${NS}" || true
 
-if [[ "${DELETE_NAMESPACE:-false}" == "true" ]]; then
-  echo "Deleting namespace ${NS}"
-  oc delete namespace "${NS}" --wait=false || true
-fi
+echo "Deleting namespace ${NS}"
+delete_namespace "${NS}" || true

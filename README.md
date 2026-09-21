@@ -269,9 +269,9 @@ Open the URL in your browser and start asking questions about lemonade and other
 
 ```bash
 ./scripts/undeploy.sh lemonade
-# optional: also delete the namespace
-DELETE_NAMESPACE=true ./scripts/undeploy.sh lemonade
 ```
+
+This uninstalls the Helm release and deletes the variant namespace.
 
 Or with Helm:
 
