@@ -94,19 +94,10 @@ ALL_REGEX_PATTERNS = [
 
 
 def normalize_message(message: str) -> str:
-    """Normalize common Spanish typos/accents to reduce false positives in detectors."""
+    """Normalize common Portuguese typos for cachaça questions."""
     text = message.strip()
     text = re.sub(r"(?i)\bcachaca\b", "cachaça", text)
     text = re.sub(r"(?i)\bcaipirinha\b", "caipirinha", text)
-    text = re.sub(r"(?i)\bcomo\b", "cómo", text)
-    text = re.sub(r"(?i)\bque\b", "qué", text)
-    text = re.sub(r"(?i)\bcuanto\b", "cuánto", text)
-    text = re.sub(r"(?i)\bcuantos\b", "cuántos", text)
-    text = re.sub(r"(?i)\bcuantas\b", "cuántas", text)
-    text = re.sub(r"(?i)\bdonde\b", "dónde", text)
-    text = re.sub(r"(?i)\bcuando\b", "cuándo", text)
-    if "?" in text and not text.lstrip().startswith("¿"):
-        text = "¿" + text.lstrip()
     return text
 
 
@@ -414,11 +405,11 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
             "input": {
                 "hap": {},
                 "language_detection": {},
+                "prompt_injection": {}
             },
             "output": {
                 "hap": {},
-                "language_detection": {},
-                "prompt_injection": {}
+                "language_detection": {}
             }
         }
     }
