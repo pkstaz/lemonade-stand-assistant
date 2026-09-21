@@ -399,9 +399,8 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
         return
     logger.debug("Local regex check passed")
 
-    # Build request payload - regex already checked locally, so only send to orchestrator
-    # for HAP, prompt injection, and language detection
-    # Note: We still include regex_competitor for OUTPUT detection (LLM responses)
+    # Build request payload. Topic regex is enforced locally (input + output)
+    # because the orchestrator's built-in regex sidecar is often unavailable.
     payload = {
         "model": VLLM_MODEL,
         "messages": [
@@ -418,9 +417,6 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
             },
             "output": {
                 "hap": {},
-                "regex_competitor": {
-                    "regex": ALL_REGEX_PATTERNS
-                },
                 "language_detection": {},
                 "prompt_injection": {}
             }
@@ -565,6 +561,18 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
                                 continue
 
                             full_response += content
+                            if check_regex_locally(full_response):
+                                await metrics.add_detections(
+                                    [{"results": [{"detector_id": "regex_competitor", "score": 1.0}]}],
+                                    "output",
+                                    source,
+                                )
+                                yield {
+                                    "type": "error",
+                                    "message": DETECTOR_MESSAGES["regex_competitor_output"] + " Posso ajudar com mais alguma coisa?",
+                                    "detector_type": "regex",
+                                }
+                                return
                             yield {"type": "chunk", "content": content}
                             # Add newline after each chunk for markdown formatting
                             full_response += "\n"
