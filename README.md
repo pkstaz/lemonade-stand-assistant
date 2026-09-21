@@ -87,6 +87,10 @@ chart/files/                 # Helm-mounted assets (same language layout)
 
 See [`alternatives/README.md`](./alternatives/README.md) for editing tips.
 
+### Grafana vs Shiny monitoring
+
+The default deploy uses the **Shiny** dashboard. An older/alternate packaging that uses **Grafana** lives in [`grafana-version/`](./grafana-version/) (Grafana Operator + Prometheus dashboards). That folder is independent of the language/theme variants above.
+
 ### Architecture Diagrams
 
 ![architecture.png](./docs/images/architecture.png)
