@@ -17,6 +17,7 @@ app:
   image: quay.io/ckavili/lemon-fastapi:1.0.26
 
 # LLM configuration
+# In-cluster llama-32 uses KServe Service port 80. Override for BYO/MaaS.
 model: {}
   # name: my-model
   # endpoint: my-maas-instance

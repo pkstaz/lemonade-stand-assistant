@@ -110,20 +110,8 @@ ALL_REGEX_PATTERNS = [
 
 
 def normalize_message(message: str) -> str:
-    """Normalize common Spanish typos/accents to reduce false positives in detectors."""
-    text = message.strip()
-    text = re.sub(r"(?i)\blate\b", "latte", text)
-    text = re.sub(r"(?i)\bcafe\b", "café", text)
-    text = re.sub(r"(?i)\bcomo\b", "cómo", text)
-    text = re.sub(r"(?i)\bque\b", "qué", text)
-    text = re.sub(r"(?i)\bcuanto\b", "cuánto", text)
-    text = re.sub(r"(?i)\bcuantos\b", "cuántos", text)
-    text = re.sub(r"(?i)\bcuantas\b", "cuántas", text)
-    text = re.sub(r"(?i)\bdonde\b", "dónde", text)
-    text = re.sub(r"(?i)\bcuando\b", "cuándo", text)
-    if "?" in text and not text.lstrip().startswith("¿"):
-        text = "¿" + text.lstrip()
-    return text
+    """Light cleanup for English coffee questions."""
+    return message.strip()
 
 
 # Compile regex patterns for efficient local matching
@@ -376,7 +364,7 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
     if len(message) > MAX_INPUT_CHARS:
         yield {
             "type": "error",
-            "message": "¡Tu mensaje es demasiado largo! Mantén tu pregunta corta y simple, idealmente menos de 100 caracteres."
+            "message": "Your message is too long! Please keep your question short and simple - ideally under 100 characters."
         }
         return
 
@@ -415,9 +403,8 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
         return
     logger.debug("Local regex check passed")
 
-    # Build request payload - regex already checked locally, so only send to orchestrator
-    # for HAP, prompt injection, and language detection
-    # Note: We still include regex_competitor for OUTPUT detection (LLM responses)
+    # Build request payload. Topic regex is enforced locally (input + output)
+    # because the orchestrator's built-in regex sidecar is often unavailable.
     payload = {
         "model": VLLM_MODEL,
         "messages": [
@@ -434,9 +421,6 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
             },
             "output": {
                 "hap": {},
-                "regex_competitor": {
-                    "regex": ALL_REGEX_PATTERNS
-                },
                 "language_detection": {},
                 "prompt_injection": {}
             }
@@ -581,6 +565,19 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
                                 continue
 
                             full_response += content
+                            # Built-in regex sidecar is often unavailable; enforce topic regex locally.
+                            if check_regex_locally(full_response):
+                                await metrics.add_detections(
+                                    [{"results": [{"detector_id": "regex_competitor", "score": 1.0}]}],
+                                    "output",
+                                    source,
+                                )
+                                yield {
+                                    "type": "error",
+                                    "message": DETECTOR_MESSAGES["regex_competitor_output"] + " Is there anything else I can help you with?",
+                                    "detector_type": "regex",
+                                }
+                                return
                             yield {"type": "chunk", "content": content}
                             # Add newline after each chunk for markdown formatting
                             full_response += "\n"
@@ -608,20 +605,20 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
                         await asyncio.sleep(delay)
                     continue
                 else:
-                    yield {"type": "error", "message": "No se recibió respuesta. Por favor, inténtalo de nuevo."}
+                    yield {"type": "error", "message": "No response received. Please try again."}
                     return
 
         except aiohttp.ClientError as e:
             if attempt < max_retries:
                 await asyncio.sleep(base_delay * (2 ** attempt))
                 continue
-            yield {"type": "error", "message": f"Error de conexión: {str(e)}"}
+            yield {"type": "error", "message": f"Connection error: {str(e)}"}
             return
         except asyncio.TimeoutError:
             if attempt < max_retries:
                 await asyncio.sleep(base_delay * (2 ** attempt))
                 continue
-            yield {"type": "error", "message": "La solicitud expiró"}
+            yield {"type": "error", "message": "Request timed out"}
             return
         except Exception as e:
             yield {"type": "error", "message": f"Error: {str(e)}"}
@@ -722,13 +719,13 @@ async def root():
     <div class="examples">
         <button onclick="sendExample('Tell me about coffee')">Tell me about coffee</button>
         <button onclick="sendExample('What are the benefits of coffee?')">Coffee benefits</button>
-        <button onclick="sendExample('¿Cómo preparo un espresso?')">¿Cómo preparo un espresso?</button>
+        <button onclick="sendExample('How do I make an espresso?')">How do I make an espresso?</button>
     </div>
     <div class="chat-container" id="chat"></div>
     <div class="input-container">
         <div class="input-wrapper">
             <input type="text" id="message" placeholder="Ask about coffee..." maxlength="100" onkeypress="if(event.key==='Enter')sendMessage()">
-            <button id="send" onclick="sendMessage()">Enviar</button>
+            <button id="send" onclick="sendMessage()">Send</button>
         </div>
     </div>
     <div class="footer">Powered by <a href="https://www.redhat.com/en/products/ai/enterprise" target="_blank">Red Hat AI Enterprise</a> - <a href="https://github.com/rh-ai-quickstart/lemonade-stand-assistant" target="_blank">AI Quickstart</a>, by the <a href="http://red.ht/cai-team" target="_blank">CAI team</a></div>
