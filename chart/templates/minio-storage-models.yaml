@@ -1,7 +1,9 @@
+{{- $ns := include "assistant.namespace" . }}
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: {{ $ns }}
   name: minio-storage-guardrail-detectors
   annotations:
     helm.sh/weight: "-5"
@@ -17,6 +19,7 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
+  namespace: {{ $ns }}
   name: minio-storage-guardrail-detectors-claim
   annotations:
     helm.sh/weight: "-5"
@@ -31,6 +34,7 @@ spec:
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: {{ $ns }}
   name: minio-storage-guardrail-detectors
   annotations:
     helm.sh/weight: "-4"
@@ -41,7 +45,7 @@ spec:
   selector:
     matchLabels:
       app: minio-storage-guardrail-detectors 
-  template: 
+  template:
     metadata:
       labels:
         app: minio-storage-guardrail-detectors
@@ -103,6 +107,7 @@ spec:
 apiVersion: v1
 kind: Secret
 metadata:
+  namespace: {{ $ns }}
   name: minio-data-connection-detector-models
   labels:
     opendatahub.io/dashboard: 'true'

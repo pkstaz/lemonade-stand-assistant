@@ -10,6 +10,7 @@ Built by Anneli Sara Banderby and Cansu Kavili-Örnek.
   - [Architecture diagrams](#architecture-diagrams)
   - [See it in action](#see-it-in-action)
   - [Monitoring dashboards](#monitoring-dashboards)
+- [Demo variants](#demo-variants)
 - [Requirements](#requirements)
   - [Minimum hardware requirements](#minimum-hardware-requirements)
   - [Minimum software requirements](#minimum-software-requirements)
@@ -46,12 +47,45 @@ https://github.com/user-attachments/assets/998dd37d-6130-4971-b8a2-d4ded8c40a27
 To ensure safe and appropriate interactions, the system employs multiple AI guardrails:
 - **[IBM HAP Detector (Granite Guardian)](https://huggingface.co/ibm-granite/granite-guardian-hap-125m)**: Monitors conversations for hate, abuse, and profanity
 - **[Prompt Injection Detector (DeBERTa v3)](https://huggingface.co/protectai/deberta-v3-base-prompt-injection-v2)**: Identifies and blocks attempts to manipulate the AI assistant
-- **[Lingua Language Detector](https://github.com/pemistahl/lingua)**: Ensures inputs and responses are in English only
+- **[Lingua Language Detector](https://github.com/pemistahl/lingua)**: Ensures inputs and responses match the variant language (English, Spanish, or Portuguese)
 
 Furthermore, there is a:
-- **Regex Detector**: Blocks specific text without the use of models. In our case, it's other fruits we consider "competitors".
+- **Regex Detector**: Blocks specific text without the use of models. In our case, off-topic competitors (other fruits or beverages, depending on the variant).
 
 The guardrails orchestrator coordinates these detectors to evaluate inputs and outputs before presenting responses to users.
+
+## Demo variants
+
+The **original** demo is the English lemonade stand (`lemonade-stand-app/`). Localized alternatives live under [`alternatives/`](./alternatives/), grouped by language:
+
+| Variant | Language | Theme | Namespace | Deploy |
+|---------|----------|-------|-----------|--------|
+| `lemonade` | English | Lemons | `lemonade-stand-assistant` | `./scripts/deploy.sh lemonade` |
+| `coffee` | English | Coffee | `coffee-assistant` | `./scripts/deploy.sh coffee` |
+| `cafe` | Spanish | Café | `asistente-cafe` | `./scripts/deploy.sh cafe` |
+| `mate` | Spanish | Mate (Uruguay) | `asistente-mate` | `./scripts/deploy.sh mate` |
+| `piscola` | Spanish | Piscola (Chile) | `asistente-piscola` | `./scripts/deploy.sh piscola` |
+| `cafept` | Portuguese | Café | `assistente-cafe` | `./scripts/deploy.sh cafept` |
+| `cachaca` | Portuguese | Cachaça | `assistente-cachaca` | `./scripts/deploy.sh cachaca` |
+
+```
+lemonade-stand-app/          # original English lemonade
+alternatives/
+  en/coffee/
+  es/cafe/
+  es/mate/
+  es/piscola/
+  pt/cafe/
+  pt/cachaca/
+chart/files/                 # Helm-mounted assets (same language layout)
+  lemonade/
+  en/coffee/
+  es/...
+  pt/cafe/
+  pt/cachaca/
+```
+
+See [`alternatives/README.md`](./alternatives/README.md) for editing tips.
 
 ### Architecture Diagrams
 
@@ -132,13 +166,27 @@ Before deploying, ensure you have:
 
 ### Deployment
 
+**Recommended:** use the helper script (creates the namespace and picks values for the variant):
+
+```bash
+./scripts/deploy.sh lemonade    # original English lemonade
+./scripts/deploy.sh coffee      # English coffee
+./scripts/deploy.sh cafe        # Spanish café
+./scripts/deploy.sh mate        # Spanish mate
+./scripts/deploy.sh piscola     # Spanish piscola
+./scripts/deploy.sh cafept      # Portuguese café
+./scripts/deploy.sh cachaca     # Portuguese cachaça
+```
+
+Or install with Helm manually:
+
 1. Clone the repository:
 ```bash
 git clone https://github.com/rh-ai-quickstart/lemonade-stand-assistant.git
 cd lemonade-stand-assistant
 ```
 
-2. Create a new OpenShift project:
+2. Create a new OpenShift project (example for lemonade):
 ```bash
 PROJECT="lemonade-stand-assistant"
 oc new-project ${PROJECT}
@@ -151,6 +199,7 @@ oc new-project ${PROJECT}
 If you have an existing model endpoint, provide the model name, endpoint, port, and API key:
 ```bash
 helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+  -f chart/values-lemonade.yaml \
   --set model.name=YOUR_MODEL_NAME \
   --set model.endpoint=YOUR_ENDPOINT \
   --set model.port=443 \
@@ -163,7 +212,8 @@ helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
 
 If you don't provide any model configuration, the chart will automatically deploy a Llama 3.2 3B Instruct model on your cluster:
 ```bash
-helm install lemonade-stand-assistant ./chart --namespace ${PROJECT}
+./scripts/deploy.sh lemonade
+# or: helm install lemonade-stand-assistant ./chart -n lemonade-stand-assistant -f chart/values-lemonade.yaml
 ```
 
 > **Note**: Option B requires a GPU available in your cluster for the LLM deployment. See [Minimum hardware requirements](#minimum-hardware-requirements) for details.
@@ -213,10 +263,16 @@ Open the URL in your browser and start asking questions about lemonade and other
 
 ### Delete
 
-To remove the deployment:
+```bash
+./scripts/undeploy.sh lemonade
+# optional: also delete the namespace
+DELETE_NAMESPACE=true ./scripts/undeploy.sh lemonade
+```
+
+Or with Helm:
 
 ```bash
-helm uninstall lemonade-stand-assistant --namespace ${PROJECT}
+helm uninstall lemonade-stand-assistant --namespace lemonade-stand-assistant
 ```
 
 ## Technical details

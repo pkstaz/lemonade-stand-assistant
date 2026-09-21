@@ -1,0 +1,11 @@
+{{- $ns := include "assistant.namespace" . }}
+{{- if and .Values.namespace.create (not (lookup "v1" "Namespace" "" $ns)) }}
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    demo-variant: {{ include "assistant.variant" . }}
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

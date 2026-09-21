@@ -1,4 +1,21 @@
 ---
+# Demo variant (see README / alternatives/):
+#   lemonade | coffee | cafe | mate | piscola | cafept | cachaca
+variant: lemonade
+
+# Namespace (created by scripts/deploy.sh; set create: true only for manual helm installs)
+namespace:
+  create: false
+  name: ""
+
+# Helm release name (auto: same as namespace)
+releaseName: ""
+
+# Main application (name is derived from variant unless overridden)
+app:
+  name: ""  # auto from variant
+  image: quay.io/ckavili/lemon-fastapi:1.0.26
+
 # LLM configuration
 model: {}
   # name: my-model
@@ -51,7 +68,7 @@ shinyDashboard:
     enabled: true
     host: ""  # Leave empty for auto-generated hostname
   metrics:
-    url: "http://lemonade-stand:8080/metrics"
+    url: ""  # auto: http://<app-name>:8080/metrics
     refreshInterval: 1
   resources:
     requests:

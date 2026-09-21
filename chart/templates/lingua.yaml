@@ -1,7 +1,20 @@
+{{- $ns := include "assistant.namespace" . }}
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  namespace: {{ $ns }}
+  name: lingua-detector-app
+  labels:
+    app: lingua-detector
+data:
+  app.py: |
+{{ .Files.Get "files/lingua-app.py" | indent 4 }}
 ---
 kind: Deployment
 apiVersion: apps/v1
 metadata:
+  namespace: {{ $ns }}
   name: lingua-detector
   labels:
     app: lingua-detector
@@ -48,6 +61,13 @@ spec:
           env:
             - name: LOG_LEVEL
               value: INFO
+            - name: TARGET_LANGUAGE
+              value: {{ include "assistant.targetLanguage" . | quote }}
+          volumeMounts:
+            - name: lingua-app
+              mountPath: /app/app.py
+              subPath: app.py
+              readOnly: true
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -56,6 +76,11 @@ spec:
           image: 'quay.io/ckavili/lingua-language-detector:0.0.25'
       restartPolicy: Always
       terminationGracePeriodSeconds: 30
+      volumes:
+        - name: lingua-app
+          configMap:
+            name: lingua-detector-app
+            defaultMode: 0444
       dnsPolicy: ClusterFirst
       securityContext: {}
       schedulerName: default-scheduler
@@ -77,6 +102,7 @@ spec:
 kind: Service
 apiVersion: v1
 metadata:
+  namespace: {{ $ns }}
   name: lingua-detector
   labels:
     app: lingua-detector

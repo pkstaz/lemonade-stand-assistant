@@ -1,8 +1,10 @@
+{{- $ns := include "assistant.namespace" . }}
 {{ if not .Values.model }}
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime
 metadata:
+  namespace: {{ $ns }}
   annotations:
     helm.sh/weight: "0"
     opendatahub.io/accelerator-name: ''
@@ -55,6 +57,7 @@ spec:
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
+  namespace: {{ $ns }}
   annotations:
     helm.sh/weight: "1"
     openshift.io/display-name: llama-32

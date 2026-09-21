@@ -1,7 +1,9 @@
+{{- $ns := include "assistant.namespace" . }}
 ---
 kind: ConfigMap
 apiVersion: v1
 metadata:
+  namespace: {{ $ns }}
   name: fms-orchestr8-config-nlp
   annotations:
     helm.sh/weight: "0"

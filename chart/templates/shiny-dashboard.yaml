@@ -1,7 +1,24 @@
+{{- $ns := include "assistant.namespace" . }}
+{{- $files := include "assistant.filesPath" . }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  namespace: {{ $ns }}
+  name: shiny-dashboard-app
+  labels:
+    app: shiny-dashboard
+    app.kubernetes.io/name: shiny-dashboard
+    app.kubernetes.io/component: dashboard
+    demo-variant: {{ include "assistant.variant" . }}
+data:
+  app.R: |
+{{ .Files.Get (printf "%s/shiny-app.R" $files) | indent 4 }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: {{ $ns }}
   name: shiny-dashboard
   labels:
     app: shiny-dashboard
@@ -28,9 +45,14 @@ spec:
           protocol: TCP
         env:
         - name: METRICS_URL
-          value: {{ .Values.shinyDashboard.metrics.url | quote }}
+          value: {{ .Values.shinyDashboard.metrics.url | default (printf "http://%s:8080/metrics" (include "assistant.appName" .)) | quote }}
         - name: REFRESH_INTERVAL
           value: {{ .Values.shinyDashboard.metrics.refreshInterval | quote }}
+        volumeMounts:
+        - name: shiny-app
+          mountPath: /srv/shiny-server/app.R
+          subPath: app.R
+          readOnly: true
         resources:
           {{- toYaml .Values.shinyDashboard.resources | nindent 10 }}
         livenessProbe:
@@ -49,10 +71,16 @@ spec:
           periodSeconds: 10
           timeoutSeconds: 5
           failureThreshold: 3
+      volumes:
+      - name: shiny-app
+        configMap:
+          name: shiny-dashboard-app
+          defaultMode: 0444
 ---
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: {{ $ns }}
   name: shiny-dashboard
   labels:
     app: shiny-dashboard
@@ -72,6 +100,7 @@ spec:
 apiVersion: route.openshift.io/v1
 kind: Route
 metadata:
+  namespace: {{ $ns }}
   name: shiny-dashboard
   labels:
     app: shiny-dashboard
