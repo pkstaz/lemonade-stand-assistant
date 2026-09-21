@@ -1,6 +1,6 @@
 apiVersion: v2
-name: lemonade-stand-assistant
-description: A Helm chart for Lemonade Stand Assistant Application
+name: guardrails-assistant
+description: Helm chart for multi-language guardrails demos (lemonade, coffee, café ES/PT, mate, piscola, cachaça)
 type: application
 version: 1.0.0
 appVersion: "1.0.0"

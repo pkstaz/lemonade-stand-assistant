@@ -118,6 +118,13 @@ ALL_REGEX_PATTERNS = [
 # Compile regex patterns for efficient local matching
 COMPILED_REGEX_PATTERNS = [re.compile(pattern) for pattern in ALL_REGEX_PATTERNS]
 
+# Local HAP patterns for fast pre-filtering (covers common demo insults)
+HAP_LOCAL_PATTERNS = [
+    r"\b(?i:stupid|idiot(?:ic|s)?|dumb(?:ass)?|moron(?:ic|s)?|jerk(?:s)?|bastard(?:s)?|asshole(?:s)?|bitch(?:es)?|damn\s+you|shut\s+up|screw\s+you)\b",
+    r"\b(?i:you\s+(?:stupid|dumb|idiotic|useless|worthless)\s+\w+)\b",
+]
+COMPILED_HAP_PATTERNS = [re.compile(pattern) for pattern in HAP_LOCAL_PATTERNS]
+
 
 def check_regex_locally(text: str) -> bool:
     """
@@ -126,6 +133,14 @@ def check_regex_locally(text: str) -> bool:
     This pre-filters requests before sending to the orchestrator.
     """
     for pattern in COMPILED_REGEX_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
+
+def check_hap_locally(text: str) -> bool:
+    """Pre-filter common insults locally before calling the orchestrator."""
+    for pattern in COMPILED_HAP_PATTERNS:
         if pattern.search(text):
             return True
     return False
@@ -178,6 +193,11 @@ class AsyncMetricsCollector:
             self._ensure_source(source)
             self._sources[source]["local_regex_blocks"] += 1
             self._sources[source]["detections"]["regex_competitor"]["input"] += 1
+
+    async def increment_local_hap_block(self, source: str = "audience"):
+        async with self.lock:
+            self._ensure_source(source)
+            self._sources[source]["detections"]["hap"]["input"] += 1
 
     async def add_detections(self, detections_data, direction: str, source: str = "audience"):
         async with self.lock:
@@ -374,6 +394,17 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
         return
     logger.debug("Local regex check passed")
 
+    logger.debug("Checking local HAP patterns...")
+    if check_hap_locally(message):
+        await metrics.increment_local_hap_block(source)
+        yield {
+            "type": "error",
+            "message": DETECTOR_MESSAGES["hap_input"] + " Is there anything else I can help you with?",
+            "detector_type": "hap"
+        }
+        return
+    logger.debug("Local HAP check passed")
+
     # Build request payload - regex already checked locally, so only send to orchestrator
     # for HAP, prompt injection, and language detection
     # Note: We still include regex_competitor for OUTPUT detection (LLM responses)
@@ -412,7 +443,13 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
         Returns (None, False, None, None, None) for non-content lines.
         """
         line = line.strip()
-        if not line or line == "data: [DONE]" or not line.startswith("data: "):
+        if not line:
+            return None, False, None, None, None
+
+        if line.startswith("event: error"):
+            return None, False, None, None, None
+
+        if line == "data: [DONE]" or not line.startswith("data: "):
             return None, False, None, None, None
 
         try:
@@ -420,6 +457,10 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
         except json.JSONDecodeError:
             logger.debug(f"Failed to parse SSE line: {line[:200]}")
             return None, False, None, None, None
+
+        if chunk_data.get("code"):
+            logger.error(f"Orchestrator error: {chunk_data}")
+            return None, True, "Guardrails service error. Please try again.", "error", None
 
         warnings_list = chunk_data.get("warnings", [])
         detections = chunk_data.get("detections", {})

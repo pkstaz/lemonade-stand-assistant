@@ -46,7 +46,7 @@ spec:
     spec:
       containers:
         - name: lemonade-stand
-          image: quay.io/ckavili/lemon-fastapi:1.0.26
+          image: quay.io/ckavili/lemon-fastapi:1.0.23
           imagePullPolicy: Always
           ports:
             - containerPort: 8080
@@ -60,7 +60,7 @@ spec:
             - name: GUARDRAILS_ORCHESTRATOR_SERVICE_SERVICE_PORT
               value: "8032"
             - name: VLLM_MODEL
-              value: {{ .Values.model.name | default "llama32" }}
+              value: "llama32"
             - name: VLLM_API_KEY
               valueFrom:
                 secretKeyRef:
@@ -164,7 +164,7 @@ metadata:
     app.kubernetes.io/component: config
 type: Opaque
 stringData:
-  vllm-api-key: {{ .Values.model.api_key | default "fake" }}
+  vllm-api-key: ""
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

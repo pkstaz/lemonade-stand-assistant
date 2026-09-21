@@ -1,7 +1,9 @@
+{{- $ns := include "assistant.namespace" . }}
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
+  namespace: {{ $ns }}
   name: chunker-service
   labels:
     app: chunker-service
@@ -36,6 +38,7 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
+  namespace: {{ $ns }}
   name: chunker-service
   labels:
     app: chunker-service

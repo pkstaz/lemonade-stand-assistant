@@ -1,12 +1,13 @@
 {{- if .Values.metrics.dashboard.enabled }}
+{{- $app := include "assistant.appName" . }}
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: lemonade-stand-dashboard
+  name: {{ $app }}-dashboard
   namespace: openshift-config-managed
   labels:
-    app: lemonade-stand
-    app.kubernetes.io/name: lemonade-stand
+    app: {{ $app }}
+    app.kubernetes.io/name: {{ $app }}
     app.kubernetes.io/component: config
     console.openshift.io/dashboard: "true"
     {{- if .Values.metrics.dashboard.odc }}

@@ -1,8 +1,10 @@
+{{- $ns := include "assistant.namespace" . }}
 ---
 ---
 apiVersion: trustyai.opendatahub.io/v1alpha1
 kind: GuardrailsOrchestrator
 metadata:
+  namespace: {{ $ns }}
   name: guardrails-orchestrator
   finalizers:
     - trustyai.opendatahub.io/gorch-finalizer

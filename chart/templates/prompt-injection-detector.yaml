@@ -1,7 +1,9 @@
+{{- $ns := include "assistant.namespace" . }}
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime
 metadata:
+  namespace: {{ $ns }}
   annotations:
     helm.sh/weight: "0"
     opendatahub.io/recommended-accelerators: '["nvidia.com/gpu"]'
@@ -44,6 +46,7 @@ spec:
 apiVersion: serving.kserve.io/v1beta1
 kind: InferenceService
 metadata:
+  namespace: {{ $ns }}
   annotations:
     helm.sh/weight: "1"
     openshift.io/display-name: prompt-injection-detector

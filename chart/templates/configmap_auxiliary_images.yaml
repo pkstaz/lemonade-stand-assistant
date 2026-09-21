@@ -1,7 +1,9 @@
+{{- $ns := include "assistant.namespace" . }}
 ---
 apiVersion: v1
 kind: ConfigMap
 metadata:
+  namespace: {{ $ns }}
   name: guardrails-orchestrator-config
   annotations:
     helm.sh/weight: "0"
