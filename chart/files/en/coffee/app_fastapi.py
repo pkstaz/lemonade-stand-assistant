@@ -418,11 +418,11 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
             "input": {
                 "hap": {},
                 "language_detection": {},
+                "prompt_injection": {}
             },
             "output": {
                 "hap": {},
-                "language_detection": {},
-                "prompt_injection": {}
+                "language_detection": {}
             }
         }
     }
