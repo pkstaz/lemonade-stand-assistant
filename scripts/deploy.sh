@@ -5,9 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 CHART="${REPO_ROOT}/chart"
 
+SHARED_MODELS=0
+SHARED_NS="lemonade-stand-assistant"
+STANDALONE=0
+PASSTHROUGH=()
+
 usage() {
   cat <<EOF
-Usage: $(basename "$0") <variant> [helm upgrade args...]
+Usage: $(basename "$0") <variant> [options] [helm upgrade args...]
 
 Variants (language / theme -> namespace):
   lemonade   English  / lemons     -> lemonade-stand-assistant
@@ -18,13 +23,17 @@ Variants (language / theme -> namespace):
   cafept     Portuguese / café     -> assistente-cafe
   cachaca    Portuguese / cachaça  -> assistente-cachaca
 
+Options:
+  --share-models [=NS]  Reuse LLM + HAP + prompt-injection (+ MinIO) from NS
+                        (default NS: lemonade-stand-assistant). Keeps Lingua local.
+  --standalone          Deploy a full model stack in this variant namespace
+                        (default for lemonade; others share by default)
+
 Examples:
   $(basename "$0") lemonade
-  $(basename "$0") coffee
-  $(basename "$0") cafe
-  $(basename "$0") cafept
-  $(basename "$0") cachaca
-  $(basename "$0") mate --set model.api_key=secret
+  $(basename "$0") cafe                 # shares models from lemonade by default
+  $(basename "$0") cafe --standalone    # own LLM/detectors
+  $(basename "$0") mate --share-models=lemonade-stand-assistant
 EOF
 }
 
@@ -35,6 +44,32 @@ fi
 
 variant="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
 shift
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --share-models)
+      SHARED_MODELS=1
+      shift
+      ;;
+    --share-models=*)
+      SHARED_MODELS=1
+      SHARED_NS="${1#*=}"
+      shift
+      ;;
+    --standalone)
+      STANDALONE=1
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      PASSTHROUGH+=("$1")
+      shift
+      ;;
+  esac
+done
 
 case "${variant}" in
   lemonade|lemon)
@@ -86,6 +121,14 @@ case "${variant}" in
     ;;
 esac
 
+# Secondary variants share lemonade models by default (unless --standalone)
+if [[ "${variant}" != "lemonade" && "${variant}" != "lemon" && "${STANDALONE}" -eq 0 ]]; then
+  SHARED_MODELS=1
+fi
+if [[ "${STANDALONE}" -eq 1 ]]; then
+  SHARED_MODELS=0
+fi
+
 ensure_namespace() {
   local ns="$1"
   if command -v oc >/dev/null 2>&1; then
@@ -103,6 +146,16 @@ ensure_namespace() {
   fi
 }
 
+HELM_EXTRA=()
+if [[ "${SHARED_MODELS}" -eq 1 ]]; then
+  echo "Sharing LLM/detectors from namespace=${SHARED_NS} (Lingua stays local)"
+  HELM_EXTRA+=(
+    --set models.shared.enabled=true
+    --set models.shared.namespace="${SHARED_NS}"
+    --set model.name=llama32
+  )
+fi
+
 echo "Deploying variant=${variant} release=${RELEASE} namespace=${NS}"
 
 ensure_namespace "${NS}"
@@ -110,7 +163,8 @@ ensure_namespace "${NS}"
 helm upgrade --install "${RELEASE}" "${CHART}" \
   -n "${NS}" \
   -f "${VALUES}" \
-  "$@"
+  "${HELM_EXTRA[@]}" \
+  "${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"}"
 
 echo
 echo "Chat URL:"

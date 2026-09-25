@@ -1,4 +1,5 @@
 {{- $ns := include "assistant.namespace" . }}
+{{- if eq (include "assistant.deployDetectors" .) "true" }}
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime
@@ -86,3 +87,4 @@ spec:
         key: nvidia.com/gpu
         operator: Exists
     {{- end }}
+{{- end }}

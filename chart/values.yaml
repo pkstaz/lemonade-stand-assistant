@@ -24,12 +24,24 @@ model: {}
   # port: 443
   # api_key: my-api-key
 
+# Shared models across variants (avoid deploying LLM/HAP/PI/MinIO twice)
+# Keep Lingua local per variant (language differs).
+models:
+  # Explicit overrides (optional). When shared.enabled=true these become false.
+  # deployLlm: true
+  # deployDetectors: true
+  shared:
+    enabled: false
+    # Namespace that already runs lemonade (owns llama + detectors + minio)
+    namespace: lemonade-stand-assistant
+
 # Detector configuration
 # Configure GPU usage and resources for each detector
 detectors:
   # IBM HAP Detector (Granite Guardian)
   hap:
     useGpu: false
+    # hostname: ""  # override; auto FQDN when models.shared.enabled
     resources:
       requests:
         cpu: '1'
@@ -41,6 +53,7 @@ detectors:
   # Prompt Injection Detector (DeBERTa v3)
   promptInjection:
     useGpu: false
+    # hostname: ""  # override; auto FQDN when models.shared.enabled
     resources:
       requests:
         cpu: '4'

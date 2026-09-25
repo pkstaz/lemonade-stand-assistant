@@ -87,6 +87,21 @@ chart/files/                 # Helm-mounted assets (same language layout)
 
 See [`alternatives/README.md`](./alternatives/README.md) for editing tips.
 
+### Sharing models across variants
+
+Deploying two variants used to duplicate Llama, HAP, prompt-injection and MinIO in each namespace. Now secondary variants **reuse** the lemonade stack by default:
+
+```bash
+./scripts/deploy.sh lemonade          # owns LLM + detectors + MinIO
+./scripts/deploy.sh cafe              # shares those models; keeps local Lingua (Spanish)
+./scripts/deploy.sh cafept            # shares models; local Lingua (Portuguese)
+```
+
+- Orchestrator in the secondary namespace calls cross-namespace DNS such as `llama-32-predictor.lemonade-stand-assistant.svc.cluster.local`.
+- **Lingua stays local** per variant (language differs).
+- Full isolated stack: `./scripts/deploy.sh cafe --standalone`
+- Custom owner NS: `./scripts/deploy.sh mate --share-models=lemonade-stand-assistant`
+
 ### Grafana vs Shiny monitoring
 
 The default deploy uses the **Shiny** dashboard. An older/alternate packaging that uses **Grafana** lives in [`grafana-version/`](./grafana-version/) (Grafana Operator + Prometheus dashboards). That folder is independent of the language/theme variants above.
