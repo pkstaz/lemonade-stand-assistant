@@ -20,7 +20,9 @@ Use this if you prefer Grafana / OpenShift monitoring (Prometheus/Thanos) and ca
 For the default experience in this repo, use the main chart + Shiny dashboard:
 
 ```bash
-./scripts/deploy.sh lemonade
+helm upgrade --install lemonade-stand-assistant ./chart \
+  --create-namespace -n lemonade-stand-assistant \
+  -f chart/values-lemonade.yaml
 ```
 
 ## Deploy Grafana dashboard (this variant)

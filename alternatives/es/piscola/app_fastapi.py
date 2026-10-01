@@ -98,7 +98,7 @@ ALL_REGEX_PATTERNS = [
     r"\b(?i:café|thé|chocolat|jus(?:s)?|chá|chocolate|suco(?:s)?|refrigerante(?:s)?|caffè|tè|cioccolato|kaffee|tee|schokolade)\b",
     # Japonés / Chino
     r"\b(?i:コーヒー|お茶|咖啡|茶|果汁|ジュース)\b",
-]]
+]
 
 
 def normalize_message(message: str) -> str:

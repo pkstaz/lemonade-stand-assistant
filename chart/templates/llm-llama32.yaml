@@ -1,5 +1,5 @@
 {{- $ns := include "assistant.namespace" . }}
-{{ if not .Values.model }}
+{{- if eq (include "assistant.deployLlm" .) "true" }}
 ---
 apiVersion: serving.kserve.io/v1alpha1
 kind: ServingRuntime

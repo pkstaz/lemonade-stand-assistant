@@ -1,9 +1,10 @@
 ---
-# Demo variant (see README / alternatives/):
-#   lemonade | coffee | cafe | mate | piscola | cafept | cachaca
+# Demo variant:
+#   Original: lemonade
+#   Alternatives: en-coffee | es-cafe | es-mate | es-piscola | es-chicha | es-ceviche | es-tacos | es-limonada | es-tequila | pt-cafe | pt-cachaca | pt-limonada | pt-caipirinha
 variant: lemonade
 
-# Namespace (created by scripts/deploy.sh; set create: true only for manual helm installs)
+# Namespace (use: oc new-project ... or helm --create-namespace)
 namespace:
   create: false
   name: ""
@@ -24,12 +25,26 @@ model: {}
   # port: 443
   # api_key: my-api-key
 
+# Shared models across variants (avoid deploying LLM/HAP/PI/MinIO twice)
+# Keep Lingua local per variant (language differs).
+models:
+  # Explicit overrides (optional). When shared.enabled=true these become false.
+  # deployLlm: true
+  # deployDetectors: true
+  shared:
+    enabled: false
+    # Namespace that already runs lemonade (owns llama + detectors + minio)
+    namespace: lemonade-stand-assistant
+    # Fail helm install if owner InferenceServices are missing (live cluster only)
+    validate: true
+
 # Detector configuration
 # Configure GPU usage and resources for each detector
 detectors:
   # IBM HAP Detector (Granite Guardian)
   hap:
     useGpu: false
+    # hostname: ""  # override; auto FQDN when models.shared.enabled
     resources:
       requests:
         cpu: '1'
@@ -41,6 +56,7 @@ detectors:
   # Prompt Injection Detector (DeBERTa v3)
   promptInjection:
     useGpu: false
+    # hostname: ""  # override; auto FQDN when models.shared.enabled
     resources:
       requests:
         cpu: '4'
