@@ -1,1 +1,8 @@
-variant: cafe
+variant: es-cafe
+
+# Reuse LLM/HAP/PI/MinIO from the original lemonade namespace.
+# Install lemonade first. For a full local stack: --set models.shared.enabled=false
+models:
+  shared:
+    enabled: true
+    namespace: lemonade-stand-assistant

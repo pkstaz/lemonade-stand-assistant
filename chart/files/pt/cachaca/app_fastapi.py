@@ -90,7 +90,7 @@ ALL_REGEX_PATTERNS = [
     r"\b(?i:cola\b|coca\s*-?\s*cola|pepsi|sprite|fanta|red\s*bull|monster)\b",
     r"\b(?i:coffee|tea\b|juice(?:s)?|lemonade|soda(?:s)?|beer(?:s)?|wine(?:s)?)\b",
     r"\b(?i:コーヒー|お茶|咖啡|茶)\b",
-]]
+]
 
 
 def normalize_message(message: str) -> str:

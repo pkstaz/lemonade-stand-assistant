@@ -1,0 +1,46 @@
+======================================================================
+  {{ include "assistant.variant" . }}  ({{ include "assistant.appName" . }})
+======================================================================
+
+Namespace:  {{ include "assistant.namespace" . }}
+App/Route:  {{ include "assistant.appName" . }}
+
+Chat URL:
+  oc get route {{ include "assistant.appName" . }} -n {{ include "assistant.namespace" . }} -o jsonpath='{.spec.host}{"\n"}'
+
+Dashboard:
+  oc get route shiny-dashboard -n {{ include "assistant.namespace" . }} -o jsonpath='{.spec.host}{"\n"}'
+
+{{- if eq (include "assistant.sharedModelsEnabled" .) "true" }}
+
+Shared models (LLM / HAP / prompt-injection / MinIO):
+  Namespace: {{ include "assistant.sharedModelsNamespace" . }}
+  This release does NOT deploy those models; it reuses the lemonade stack.
+
+Verify models exist and are ready:
+  oc get inferenceservice -n {{ include "assistant.sharedModelsNamespace" . }}
+  oc get inferenceservice llama-32 -n {{ include "assistant.sharedModelsNamespace" . }} \
+    -o jsonpath='{.status.modelStatus.states.activeModelState}{"\n"}'
+
+Expected InferenceServices:
+  - llama-32
+  - guardrails-detector-ibm-hap
+  - prompt-injection-detector
+
+If they are missing, install lemonade first:
+  helm upgrade --install lemonade-stand-assistant ./chart \
+    --create-namespace -n lemonade-stand-assistant \
+    -f chart/values-lemonade.yaml
+{{- else }}
+
+In-cluster models (this namespace):
+  oc get inferenceservice -n {{ include "assistant.namespace" . }}
+
+Expected InferenceServices:
+  - llama-32
+  - guardrails-detector-ibm-hap
+  - prompt-injection-detector
+{{- end }}
+
+Lingua (always local to this variant):
+  oc get deploy,svc lingua-detector -n {{ include "assistant.namespace" . }}

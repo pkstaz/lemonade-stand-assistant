@@ -1,5 +1,7 @@
 {{/*
 Return the active demo variant
+  Original: lemonade
+  Alternatives: lang-theme (en-coffee, es-cafe, pt-cafe, ...)
 */}}
 {{- define "assistant.variant" -}}
 {{- .Values.variant | default "lemonade" -}}
@@ -7,37 +9,40 @@ Return the active demo variant
 
 {{/*
 Application resource name based on variant
+  lemonade     -> lemonade-stand (unchanged original)
+  alternatives -> <variant>-stand (e.g. es-cafe-stand)
 */}}
 {{- define "assistant.appName" -}}
 {{- if .Values.app.name -}}
 {{- .Values.app.name -}}
 {{- else -}}
 {{- $v := include "assistant.variant" . -}}
-{{- if eq $v "lemonade" -}}lemonade-stand
-{{- else if eq $v "cafe" -}}asistente-cafe
-{{- else if eq $v "mate" -}}asistente-mate
-{{- else if eq $v "piscola" -}}asistente-piscola
-{{- else if eq $v "coffee" -}}coffee-assistant
-{{- else if eq $v "cachaca" -}}assistente-cachaca
-{{- else if eq $v "cafept" -}}assistente-cafe
-{{- else -}}lemonade-stand
+{{- if eq $v "lemonade" -}}
+lemonade-stand
+{{- else -}}
+{{- printf "%s-stand" $v -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}
 
 {{/*
-Path prefix for variant-specific chart files (organized by language)
+Path prefix for variant-specific chart files
+  lemonade      -> files/lemonade
+  en-coffee     -> files/en/coffee
+  es-cafe       -> files/es/cafe
+  pt-cachaca    -> files/pt/cachaca
 */}}
 {{- define "assistant.filesPath" -}}
 {{- $v := include "assistant.variant" . -}}
-{{- if eq $v "lemonade" -}}files/lemonade
-{{- else if eq $v "cafe" -}}files/es/cafe
-{{- else if eq $v "mate" -}}files/es/mate
-{{- else if eq $v "piscola" -}}files/es/piscola
-{{- else if eq $v "coffee" -}}files/en/coffee
-{{- else if eq $v "cachaca" -}}files/pt/cachaca
-{{- else if eq $v "cafept" -}}files/pt/cafe
-{{- else -}}files/lemonade
+{{- if eq $v "lemonade" -}}
+files/lemonade
+{{- else -}}
+{{- $parts := splitList "-" $v -}}
+{{- if lt (len $parts) 2 -}}
+files/lemonade
+{{- else -}}
+files/{{ index $parts 0 }}/{{ join "-" (rest $parts) }}
+{{- end -}}
 {{- end -}}
 {{- end -}}
 
@@ -46,9 +51,9 @@ Target language for Lingua detector
 */}}
 {{- define "assistant.targetLanguage" -}}
 {{- $v := include "assistant.variant" . -}}
-{{- if or (eq $v "lemonade") (eq $v "coffee") -}}
+{{- if or (eq $v "lemonade") (hasPrefix "en-" $v) -}}
 ENGLISH
-{{- else if or (eq $v "cachaca") (eq $v "cafept") -}}
+{{- else if hasPrefix "pt-" $v -}}
 PORTUGUESE
 {{- else -}}
 SPANISH
@@ -57,20 +62,18 @@ SPANISH
 
 {{/*
 Namespace for the active variant
+  lemonade     -> lemonade-stand-assistant (unchanged original)
+  alternatives -> <variant>-stand-assistant (e.g. es-cafe-stand-assistant)
 */}}
 {{- define "assistant.namespace" -}}
 {{- if .Values.namespace.name -}}
 {{- .Values.namespace.name -}}
 {{- else -}}
 {{- $v := include "assistant.variant" . -}}
-{{- if eq $v "lemonade" -}}lemonade-stand-assistant
-{{- else if eq $v "cafe" -}}asistente-cafe
-{{- else if eq $v "mate" -}}asistente-mate
-{{- else if eq $v "piscola" -}}asistente-piscola
-{{- else if eq $v "coffee" -}}coffee-assistant
-{{- else if eq $v "cachaca" -}}assistente-cachaca
-{{- else if eq $v "cafept" -}}assistente-cafe
-{{- else -}}lemonade-stand-assistant
+{{- if eq $v "lemonade" -}}
+lemonade-stand-assistant
+{{- else -}}
+{{- printf "%s-stand-assistant" $v -}}
 {{- end -}}
 {{- end -}}
 {{- end -}}

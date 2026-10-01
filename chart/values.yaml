@@ -1,9 +1,10 @@
 ---
-# Demo variant (see README / alternatives/):
-#   lemonade | coffee | cafe | mate | piscola | cafept | cachaca
+# Demo variant:
+#   Original: lemonade
+#   Alternatives: en-coffee | es-cafe | es-mate | es-piscola | es-chicha | es-ceviche | es-tacos | es-limonada | es-tequila | pt-cafe | pt-cachaca | pt-limonada | pt-caipirinha
 variant: lemonade
 
-# Namespace (created by scripts/deploy.sh; set create: true only for manual helm installs)
+# Namespace (use: oc new-project ... or helm --create-namespace)
 namespace:
   create: false
   name: ""
@@ -34,6 +35,8 @@ models:
     enabled: false
     # Namespace that already runs lemonade (owns llama + detectors + minio)
     namespace: lemonade-stand-assistant
+    # Fail helm install if owner InferenceServices are missing (live cluster only)
+    validate: true
 
 # Detector configuration
 # Configure GPU usage and resources for each detector

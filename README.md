@@ -58,49 +58,91 @@ The guardrails orchestrator coordinates these detectors to evaluate inputs and o
 
 The **original** demo is the English lemonade stand (`lemonade-stand-app/`). Localized alternatives live under [`alternatives/`](./alternatives/), grouped by language:
 
-| Variant | Language | Theme | Namespace | Deploy |
-|---------|----------|-------|-----------|--------|
-| `lemonade` | English | Lemons | `lemonade-stand-assistant` | `./scripts/deploy.sh lemonade` |
-| `coffee` | English | Coffee | `coffee-assistant` | `./scripts/deploy.sh coffee` |
-| `cafe` | Spanish | Café | `asistente-cafe` | `./scripts/deploy.sh cafe` |
-| `mate` | Spanish | Mate (Uruguay) | `asistente-mate` | `./scripts/deploy.sh mate` |
-| `piscola` | Spanish | Piscola (Chile) | `asistente-piscola` | `./scripts/deploy.sh piscola` |
-| `cafept` | Portuguese | Café | `assistente-cafe` | `./scripts/deploy.sh cafept` |
-| `cachaca` | Portuguese | Cachaça | `assistente-cachaca` | `./scripts/deploy.sh cachaca` |
+| Variant | Language | Theme | Namespace / release | App / Route | Values file |
+|---------|----------|-------|---------------------|-------------|-------------|
+| `lemonade` (**original**) | English | Lemons | `lemonade-stand-assistant` | `lemonade-stand` | `chart/values-lemonade.yaml` |
+| `en-coffee` | English | Coffee | `en-coffee-stand-assistant` | `en-coffee-stand` | `chart/values-en-coffee.yaml` |
+| `es-cafe` | Spanish | Café | `es-cafe-stand-assistant` | `es-cafe-stand` | `chart/values-es-cafe.yaml` |
+| `es-mate` | Spanish | Mate (Uruguay) | `es-mate-stand-assistant` | `es-mate-stand` | `chart/values-es-mate.yaml` |
+| `es-piscola` | Spanish | Piscola (Chile) | `es-piscola-stand-assistant` | `es-piscola-stand` | `chart/values-es-piscola.yaml` |
+| `es-chicha` | Spanish | Chicha morada (Perú) | `es-chicha-stand-assistant` | `es-chicha-stand` | `chart/values-es-chicha.yaml` |
+| `es-ceviche` | Spanish | Ceviche (Perú) | `es-ceviche-stand-assistant` | `es-ceviche-stand` | `chart/values-es-ceviche.yaml` |
+| `es-tacos` | Spanish | Tacos (México) | `es-tacos-stand-assistant` | `es-tacos-stand` | `chart/values-es-tacos.yaml` |
+| `es-limonada` | Spanish | Limonada | `es-limonada-stand-assistant` | `es-limonada-stand` | `chart/values-es-limonada.yaml` |
+| `es-tequila` | Spanish | Tequila (México) | `es-tequila-stand-assistant` | `es-tequila-stand` | `chart/values-es-tequila.yaml` |
+| `pt-cafe` | Portuguese | Café | `pt-cafe-stand-assistant` | `pt-cafe-stand` | `chart/values-pt-cafe.yaml` |
+| `pt-cachaca` | Portuguese | Cachaça | `pt-cachaca-stand-assistant` | `pt-cachaca-stand` | `chart/values-pt-cachaca.yaml` |
+| `pt-limonada` | Portuguese | Limonada | `pt-limonada-stand-assistant` | `pt-limonada-stand` | `chart/values-pt-limonada.yaml` |
+| `pt-caipirinha` | Portuguese | Caipirinha (Brasil) | `pt-caipirinha-stand-assistant` | `pt-caipirinha-stand` | `chart/values-pt-caipirinha.yaml` |
+
+The original keeps historical names. Alternatives follow the same pattern: `<variant>-stand` (app/route) and `<variant>-stand-assistant` (namespace/release). OpenShift route hosts look like `es-cafe-stand-es-cafe-stand-assistant.apps...`.
 
 ```
-lemonade-stand-app/          # original English lemonade
+lemonade-stand-app/          # original English lemonade sources
 alternatives/
   en/coffee/
   es/cafe/
   es/mate/
   es/piscola/
+  es/chicha/
+  es/ceviche/
+  es/tacos/
+  es/limonada/
+  es/tequila/
   pt/cafe/
   pt/cachaca/
-chart/files/                 # Helm-mounted assets (same language layout)
-  lemonade/
+  pt/limonada/
+  pt/caipirinha/
+chart/files/                 # Helm-mounted assets
+  lemonade/                  # original
   en/coffee/
   es/...
   pt/cafe/
   pt/cachaca/
+  pt/limonada/
+  pt/caipirinha/
 ```
-
 See [`alternatives/README.md`](./alternatives/README.md) for editing tips.
 
 ### Sharing models across variants
 
-Deploying two variants used to duplicate Llama, HAP, prompt-injection and MinIO in each namespace. Now secondary variants **reuse** the lemonade stack by default:
+LLM, HAP, prompt-injection and MinIO live **only** in `lemonade-stand-assistant`. Alternative values files enable `models.shared` and point at that namespace (Lingua stays local per language).
+
+Install the original lemonade stack first (owns the models), then any number of alternatives:
 
 ```bash
-./scripts/deploy.sh lemonade          # owns LLM + detectors + MinIO
-./scripts/deploy.sh cafe              # shares those models; keeps local Lingua (Spanish)
-./scripts/deploy.sh cafept            # shares models; local Lingua (Portuguese)
+# 1) Original — app + models (--create-namespace creates the project)
+helm upgrade --install lemonade-stand-assistant ./chart \
+  --create-namespace -n lemonade-stand-assistant \
+  -f chart/values-lemonade.yaml
+
+# Wait until models are Ready
+oc get inferenceservice -n lemonade-stand-assistant -w
+
+# 2) Alternatives — share models from lemonade-stand-assistant
+helm upgrade --install es-cafe-stand-assistant ./chart \
+  --create-namespace -n es-cafe-stand-assistant \
+  -f chart/values-es-cafe.yaml
+
+helm upgrade --install pt-cafe-stand-assistant ./chart \
+  --create-namespace -n pt-cafe-stand-assistant \
+  -f chart/values-pt-cafe.yaml
 ```
 
-- Orchestrator in the secondary namespace calls cross-namespace DNS such as `llama-32-predictor.lemonade-stand-assistant.svc.cluster.local`.
-- **Lingua stays local** per variant (language differs).
-- Full isolated stack: `./scripts/deploy.sh cafe --standalone`
-- Custom owner NS: `./scripts/deploy.sh mate --share-models=lemonade-stand-assistant`
+- Orchestrator DNS example: `llama-32-predictor.lemonade-stand-assistant.svc.cluster.local`
+- Full isolated stack for an alternative (own GPU models): add `--set models.shared.enabled=false`
+- Uninstalling an alternative does **not** remove `lemonade-stand-assistant` or the shared models
+- Installing an alternative **fails** if the lemonade InferenceServices are missing (`models.shared.validate`)
+
+**Where are the models?** Always in `lemonade-stand-assistant` (unless you use `--set models.shared.enabled=false`):
+
+```bash
+oc get inferenceservice -n lemonade-stand-assistant
+# NAME                            URL   READY   PREV   LATEST   PREVROLLEDOUTREVISION   LATESTREADYREVISION   AGE
+# llama-32                        ...   True
+# guardrails-detector-ibm-hap     ...
+# prompt-injection-detector       ...
+```
 
 ### Grafana vs Shiny monitoring
 
@@ -185,39 +227,72 @@ Before deploying, ensure you have:
 
 ### Deployment
 
-**Recommended:** use the helper script (creates the namespace and picks values for the variant):
-
-```bash
-./scripts/deploy.sh lemonade    # original English lemonade
-./scripts/deploy.sh coffee      # English coffee
-./scripts/deploy.sh cafe        # Spanish café
-./scripts/deploy.sh mate        # Spanish mate
-./scripts/deploy.sh piscola     # Spanish piscola
-./scripts/deploy.sh cafept      # Portuguese café
-./scripts/deploy.sh cachaca     # Portuguese cachaça
-```
-
-Or install with Helm manually:
-
 1. Clone the repository:
 ```bash
 git clone https://github.com/rh-ai-quickstart/lemonade-stand-assistant.git
 cd lemonade-stand-assistant
 ```
 
-2. Create a new OpenShift project (example for lemonade):
+2. Install with Helm (`--create-namespace` creates the project if needed).
+
+**Original lemonade** (owns LLM + detectors + MinIO):
+
 ```bash
-PROJECT="lemonade-stand-assistant"
-oc new-project ${PROJECT}
+helm upgrade --install lemonade-stand-assistant ./chart \
+  --create-namespace -n lemonade-stand-assistant \
+  -f chart/values-lemonade.yaml
 ```
 
-3. Install using Helm:
+**Alternatives** (install lemonade first and wait until InferenceServices are Ready):
+
+```bash
+oc get inferenceservice -n lemonade-stand-assistant
+
+helm upgrade --install es-cafe-stand-assistant ./chart \
+  --create-namespace -n es-cafe-stand-assistant -f chart/values-es-cafe.yaml
+
+helm upgrade --install en-coffee-stand-assistant ./chart \
+  --create-namespace -n en-coffee-stand-assistant -f chart/values-en-coffee.yaml
+
+helm upgrade --install es-mate-stand-assistant ./chart \
+  --create-namespace -n es-mate-stand-assistant -f chart/values-es-mate.yaml
+
+helm upgrade --install es-piscola-stand-assistant ./chart \
+  --create-namespace -n es-piscola-stand-assistant -f chart/values-es-piscola.yaml
+
+helm upgrade --install es-chicha-stand-assistant ./chart \
+  --create-namespace -n es-chicha-stand-assistant -f chart/values-es-chicha.yaml
+
+helm upgrade --install es-ceviche-stand-assistant ./chart \
+  --create-namespace -n es-ceviche-stand-assistant -f chart/values-es-ceviche.yaml
+
+helm upgrade --install es-tacos-stand-assistant ./chart \
+  --create-namespace -n es-tacos-stand-assistant -f chart/values-es-tacos.yaml
+
+helm upgrade --install es-limonada-stand-assistant ./chart \
+  --create-namespace -n es-limonada-stand-assistant -f chart/values-es-limonada.yaml
+
+helm upgrade --install es-tequila-stand-assistant ./chart \
+  --create-namespace -n es-tequila-stand-assistant -f chart/values-es-tequila.yaml
+
+helm upgrade --install pt-cafe-stand-assistant ./chart \
+  --create-namespace -n pt-cafe-stand-assistant -f chart/values-pt-cafe.yaml
+
+helm upgrade --install pt-limonada-stand-assistant ./chart \
+  --create-namespace -n pt-limonada-stand-assistant -f chart/values-pt-limonada.yaml
+
+helm upgrade --install pt-caipirinha-stand-assistant ./chart \
+  --create-namespace -n pt-caipirinha-stand-assistant -f chart/values-pt-caipirinha.yaml
+
+helm upgrade --install pt-cachaca-stand-assistant ./chart \
+  --create-namespace -n pt-cachaca-stand-assistant -f chart/values-pt-cachaca.yaml
+```
 
 **Option A: Use your own model (MaaS - Model as a Service)**
 
 If you have an existing model endpoint, provide the model name, endpoint, port, and API key:
 ```bash
-helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+helm upgrade --install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
   -f chart/values-lemonade.yaml \
   --set model.name=YOUR_MODEL_NAME \
   --set model.endpoint=YOUR_ENDPOINT \
@@ -227,13 +302,9 @@ helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
 
 > **Note**: The `model.endpoint` should be the hostname only, without `https://` prefix or trailing `/`.
 
-**Option B: Deploy with the default model**
+**Option B: Deploy with the default in-cluster model**
 
-If you don't provide any model configuration, the chart will automatically deploy a Llama 3.2 3B Instruct model on your cluster:
-```bash
-./scripts/deploy.sh lemonade
-# or: helm install lemonade-stand-assistant ./chart -n lemonade-stand-assistant -f chart/values-lemonade.yaml
-```
+Omit `model.*` overrides; the chart deploys Llama 3.2 3B Instruct in `lemonade-stand-assistant`.
 
 > **Note**: Option B requires a GPU available in your cluster for the LLM deployment. See [Minimum hardware requirements](#minimum-hardware-requirements) for details.
 
@@ -252,20 +323,23 @@ Each detector supports the following configuration options:
 
 **Example: Enable GPU for HAP detector (requires additional GPU)**
 ```bash
-helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+helm upgrade --install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+  -f chart/values-lemonade.yaml \
   --set detectors.hap.useGpu=true
 ```
 
 **Example: Enable GPU for all configurable detectors (requires 3 total GPUs)**
 ```bash
-helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+helm upgrade --install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+  -f chart/values-lemonade.yaml \
   --set detectors.hap.useGpu=true \
   --set detectors.promptInjection.useGpu=true
 ```
 
 **Example: Custom resource allocation for HAP detector**
 ```bash
-helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+helm upgrade --install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
+  -f chart/values-lemonade.yaml \
   --set detectors.hap.resources.requests.memory=2Gi \
   --set detectors.hap.resources.limits.memory=4Gi
 ```
@@ -275,7 +349,7 @@ helm install lemonade-stand-assistant ./chart --namespace ${PROJECT} \
 Once deployed, access the Lemonade Stand Assistant UI. You can find the route with:
 
 ```bash
-echo https://$(oc get route/lemonade-stand-assistant -n ${PROJECT} --template='{{.spec.host}}')
+echo https://$(oc get route/lemonade-stand -n ${PROJECT} --template='{{.spec.host}}')
 ```
 
 Open the URL in your browser and start asking questions about lemonade and other fruits!
@@ -283,15 +357,13 @@ Open the URL in your browser and start asking questions about lemonade and other
 ### Delete
 
 ```bash
-./scripts/undeploy.sh lemonade
-```
-
-This uninstalls the Helm release and deletes the variant namespace.
-
-Or with Helm:
-
-```bash
+# Original
 helm uninstall lemonade-stand-assistant --namespace lemonade-stand-assistant
+oc delete project lemonade-stand-assistant
+
+# Alternative example
+helm uninstall es-cafe-stand-assistant --namespace es-cafe-stand-assistant
+oc delete project es-cafe-stand-assistant
 ```
 
 ## Technical details
