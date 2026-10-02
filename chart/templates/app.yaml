@@ -1,6 +1,49 @@
 {{- $app := include "assistant.appName" . }}
 {{- $files := include "assistant.filesPath" . }}
 {{- $ns := include "assistant.namespace" . }}
+{{- $sharedNs := include "assistant.sharedModelsNamespace" . }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $app }}-sa
+  namespace: {{ $ns }}
+  labels:
+    app: {{ $app }}
+    app.kubernetes.io/name: {{ $app }}
+    app.kubernetes.io/component: config
+    demo-variant: {{ include "assistant.variant" . }}
+---
+# Allows the app to auto-wake the shared guardrails detectors (scale 0->1)
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $app }}-detector-scaler
+  namespace: {{ $sharedNs }}
+  labels:
+    app: {{ $app }}
+    demo-variant: {{ include "assistant.variant" . }}
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $app }}-detector-scaler
+  namespace: {{ $sharedNs }}
+  labels:
+    app: {{ $app }}
+    demo-variant: {{ include "assistant.variant" . }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $app }}-detector-scaler
+subjects:
+  - kind: ServiceAccount
+    name: {{ $app }}-sa
+    namespace: {{ $ns }}
 ---
 apiVersion: v1
 kind: ConfigMap
@@ -54,6 +97,7 @@ spec:
         app.kubernetes.io/name: {{ $app }}
         demo-variant: {{ include "assistant.variant" . }}
     spec:
+      serviceAccountName: {{ $app }}-sa
       containers:
         - name: {{ $app }}
           image: {{ .Values.app.image | default "quay.io/ckavili/lemon-fastapi:1.0.26" }}
@@ -73,6 +117,8 @@ spec:
               value: "8032"
             - name: VLLM_MODEL
               value: {{ .Values.model.name | default "llama32" }}
+            - name: GUARDRAILS_MODELS_NAMESPACE
+              value: {{ $sharedNs }}
             - name: VLLM_API_KEY
               valueFrom:
                 secretKeyRef:

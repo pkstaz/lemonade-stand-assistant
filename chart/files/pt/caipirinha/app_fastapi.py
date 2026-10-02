@@ -85,7 +85,7 @@ MAX_INPUT_CHARS = 100
 
 ALL_REGEX_PATTERNS = [
     # Outras bebidas (cachaça e caipirinha permitidas)
-    r"\b(?i:café|cafe|mate|yerba mate|chá|chocolate|suco(?:s)?|limonada|refrigerante(?:s)?|energético(?:s)?|batido(?:s)?|smoothie(?:s)?)\b",
+    r"\b(?i:café|cafe|mate|yerba mate|chá|chocolate|limonada|refrigerante(?:s)?|energético(?:s)?|batido(?:s)?|smoothie(?:s)?)\b",
     r"\b(?i:cuba\s+libre|mojito|margarita|daiquiri|martini|cosmopolitan|piña\s+cola(?:da)?|coquetel(?:éis)?|cocktail(?:s)?|rum\b|gim|gin\b|vodka|whisky|whiskey|tequila|cerveja(?:s)?|licor(?:es)?|champanhe|champagne|vinho(?:s)?|sangria|negroni|aperol|mezcal|pisco|piscola|brandy|bourbon)\b",
     r"\b(?i:cola\b|coca\s*-?\s*cola|pepsi|sprite|fanta|red\s*bull|monster)\b",
     r"\b(?i:coffee|tea\b|juice(?:s)?|lemonade|soda(?:s)?|beer(?:s)?|wine(?:s)?)\b",
@@ -110,6 +110,35 @@ HAP_LOCAL_PATTERNS = [
     r"\b(?i:você\s+(?:é\s+um\s+)?(?:idiota|burro|estúpido|inútil))\b",
 ]
 COMPILED_HAP_PATTERNS = [re.compile(pattern) for pattern in HAP_LOCAL_PATTERNS]
+
+
+# LOCAL PI PATTERNS: real prompt-injection attempts (Spanish + English).
+# The model-based PI detector (deberta-v3) false-positives on innocuous
+# Spanish topic phrases, so injection detection is enforced locally.
+PI_LOCAL_PATTERNS = [
+    r"\b(?i:ignor(?:a|á|e|ar|ando)\s+(?:las\s+|todas\s+las\s+|tus\s+|toda\s+|previas?\s+|previous\s+|any\s+|all\s+|the\s+)?(instrucciones|reglas|rules|instructions|indicaciones|directrices|lo\s+anterior|the\s+above))\b",
+    r"\b(?i:olvid(?:a|á|e|ar)\s+(?:las\s+|tus\s+|todas\s+las\s+|all\s+|your\s+)?(instrucciones|reglas|rules|instructions|entrenamiento|training))\b",
+    r"\b(?i:anul(?:a|á|e|ar)\s+(?:las\s+|tus\s+)?(reglas|instrucciones|rules|instructions))\b",
+    r"\b(?i:desobedece\s+(?:las\s+|tus\s+)?(reglas|instrucciones|rules))\b",
+    r"\b(?i:desactiva\s+(?:las\s+|tus\s+)?(reglas|instrucciones|restricciones))\b",
+    r"\b(?i:(disregard|forget)\s+(?:all\s+|previous\s+|any\s+|your\s+)?(instructions|rules|training|constraints))\b",
+    r"\b(?i:(reveal|show|mu[eé]str(?:a|ame)|dame|dime)\s+(?:me\s+)?(?:tus\s+|tu\s+|el\s+|la\s+|los\s+)?(system\s+prompt|prompt\s+(?:de\s+|del\s+)?sistema|instrucciones\s+(?:ocultas|iniciales|del\s+sistema|secretas)|hidden\s+instructions|initial\s+instructions))\b",
+    r"\b(?i:system\s+prompt|prompt\s+de\s+sistema|instrucciones\s+ocultas)\b",
+    r"\b(?i:act[uú]a\s+como\s+DAN|eres\s+DAN|you\s+are\s+DAN|modo\s+developer|developer\s+mode|DAN\s+mode)\b",
+    r"\b(?i:jailbreak)\b",
+    r"\b(?i:ignora\s+(?:todo\s+)?lo\s+(?:anterior|dicho))\b",
+    r"\b(?i:ignore\s+(?:all\s+|the\s+)?(above|previous\s+text))\b",
+]
+COMPILED_PI_PATTERNS = [re.compile(pattern) for pattern in PI_LOCAL_PATTERNS]
+
+
+def check_pi_locally(text: str) -> bool:
+    """Pre-filter real prompt-injection attempts locally (no false positives on innocuous Spanish)."""
+    for pattern in COMPILED_PI_PATTERNS:
+        if pattern.search(text):
+            return True
+    return False
+
 
 
 def check_regex_locally(text: str) -> bool:
@@ -253,6 +282,65 @@ metrics = AsyncMetricsCollector()
 # Global aiohttp session
 aiohttp_session: aiohttp.ClientSession = None
 
+# ---- Auto-wake: scale guardrails detectors up on demand ----
+K8S_API = "https://kubernetes.default.svc"
+GUARDRAILS_MODELS_NAMESPACE = os.getenv("GUARDRAILS_MODELS_NAMESPACE", "lemonade-stand-assistant")
+DETECTOR_DEPLOYMENTS = ["guardrails-detector-ibm-hap-predictor", "prompt-injection-detector-predictor"]
+WAKE_TIMEOUT = int(os.getenv("WAKE_TIMEOUT_SECONDS", "480"))
+
+
+def _sa_headers() -> dict:
+    try:
+        with open("/var/run/secrets/kubernetes.io/serviceaccount/token") as f:
+            return {"Authorization": f"Bearer {f.read().strip()}"}
+    except Exception:
+        return {}
+
+
+async def scale_up_detectors() -> None:
+    """Scale guardrails detector deployments to 1 via the Kubernetes API."""
+    for dep in DETECTOR_DEPLOYMENTS:
+        url = f"{K8S_API}/apis/apps/v1/namespaces/{GUARDRAILS_MODELS_NAMESPACE}/deployments/{dep}/scale"
+        try:
+            patch_headers = {**_sa_headers(), "Content-Type": "application/merge-patch+json"}
+            async with aiohttp_session.patch(url, json={"spec": {"replicas": 1}}, headers=patch_headers) as r:
+                if r.status in (200, 201, 409):
+                    logger.info(f"wake: {dep} scaled to 1")
+                else:
+                    logger.warning(f"wake: {dep} scale returned {r.status}")
+        except Exception as e:
+            logger.warning(f"wake: {dep} scale error: {e}")
+
+
+async def wait_for_detectors_ready(timeout: int = WAKE_TIMEOUT) -> bool:
+    """Poll detector deployments until all report at least 1 ready replica."""
+    deadline = asyncio.get_event_loop().time() + timeout
+    while asyncio.get_event_loop().time() < deadline:
+        ready = 0
+        for dep in DETECTOR_DEPLOYMENTS:
+            url = f"{K8S_API}/apis/apps/v1/namespaces/{GUARDRAILS_MODELS_NAMESPACE}/deployments/{dep}"
+            try:
+                async with aiohttp_session.get(url, headers=_sa_headers()) as r:
+                    if r.status == 200:
+                        data = await r.json()
+                        if (data.get("status") or {}).get("readyReplicas", 0) >= 1:
+                            ready += 1
+            except Exception:
+                pass
+        if ready >= len(DETECTOR_DEPLOYMENTS):
+            logger.info("wake: detectors ready")
+            return True
+        await asyncio.sleep(10)
+    logger.warning("wake: timeout waiting for detectors")
+    return False
+
+
+async def wake_detectors() -> bool:
+    """Scale detectors up and wait until they are ready (covers node provisioning too)."""
+    await scale_up_detectors()
+    return await wait_for_detectors_ready()
+
+
 
 # =============================================================================
 # Application Lifespan
@@ -370,6 +458,23 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
         return
     logger.debug("Local HAP check passed")
 
+    # LOCAL PI CHECK: real prompt-injection attempts (model-based PI has false
+    # positives on innocuous Spanish topic phrases)
+    logger.debug("Checking local PI patterns...")
+    if check_pi_locally(message):
+        await metrics.add_detections(
+            [{"results": [{"detector_id": "prompt_injection", "score": 1.0}]}],
+            "input",
+            source,
+        )
+        yield {
+            "type": "error",
+            "message": DETECTOR_MESSAGES["prompt_injection_input"] + " ¿Hay algo más en lo que pueda ayudarte?",
+            "detector_type": "prompt-injection"
+        }
+        return
+    logger.debug("Local PI check passed")
+
     # LOCAL REGEX CHECK: Pre-filter before sending to orchestrator
     # This reduces load on the orchestrator by catching obvious violations locally
     logger.debug("Checking local regex patterns...")
@@ -404,8 +509,7 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
         "detectors": {
             "input": {
                 "hap": {},
-                "language_detection": {},
-                "prompt_injection": {}
+                "language_detection": {}
             },
             "output": {
                 "hap": {},
@@ -508,6 +612,10 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
                 if response.status != 200:
                     error_text = await response.text()
                     logger.error(f"API returned {response.status}: {error_text[:500]}")
+                    if response.status in (500, 502, 503) and attempt == 0:
+                        yield {"type": "chunk", "content": "🔄 Despertando modelos, esto puede tardar unos minutos... "}
+                        if await wake_detectors():
+                            continue
                     yield {"type": "error", "message": f"API error: {response.status}"}
                     return
 
@@ -564,6 +672,19 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
                                     "detector_type": "regex",
                                 }
                                 return
+                                                        # LOCAL PI CHECK on output
+                            if check_pi_locally(full_response):
+                                await metrics.add_detections(
+                                    [{"results": [{"detector_id": "prompt_injection", "score": 1.0}]}],
+                                    "output",
+                                    source,
+                                )
+                                yield {
+                                    "type": "error",
+                                    "message": DETECTOR_MESSAGES["prompt_injection_output"] + " ¿Hay algo más en lo que pueda ayudarte?",
+                                    "detector_type": "prompt-injection",
+                                }
+                                return
                             yield {"type": "chunk", "content": content}
                             # Add newline after each chunk for markdown formatting
                             full_response += "\n"
@@ -582,6 +703,12 @@ async def process_chat(message: str, source: str = "audience") -> AsyncGenerator
 
                     yield {"type": "done"}
                     return
+
+                # Empty response - guardrails detectors may be scaled to zero: wake them up
+                if not full_response and attempt == 0:
+                    yield {"type": "chunk", "content": "🔄 Despertando modelos, esto puede tardar unos minutos... "}
+                    if await wake_detectors():
+                        continue
 
                 # Empty response - likely stale connection, retry immediately
                 if attempt < max_retries:
@@ -701,7 +828,7 @@ async def root():
     </style>
 </head>
 <body>
-    <div class="header">Bem-vindo ao assistente digital de caipirinha da Red Hat! 🇧🇷🍹</div>
+    <div class="header">Bem-vindo ao assistente digital de caipirinha da Red Hat! 📍 São Paulo, Brasil 🇧🇷🍹</div>
     <div class="examples">
         <button onclick="sendExample('Me conta sobre a caipirinha')">Me conta sobre a caipirinha</button>
         <button onclick="sendExample('Como preparo uma caipirinha?')">Preparar caipirinha</button>

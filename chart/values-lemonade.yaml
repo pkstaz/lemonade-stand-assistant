@@ -1,1 +1,38 @@
 variant: lemonade
+
+# llama-32 pinned to the compact (master+worker) node that owns the GPU.
+# The compact node carries node-role.kubernetes.io/control-plane and has no taints.
+# llama stays ALWAYS at replica 1 (minReplicas=1, not touched by the idle scaler).
+models:
+  llm:
+    nodeSelector:
+      node-role.kubernetes.io/control-plane: ""
+    tolerations: []
+# HAP + prompt-injection are the SCALABLE models: min=0/max=1 with a 60min
+# no-traffic grace (idle scaler CronJob). Only these 2 live on the guardrails node.
+idleScaler:
+  enabled: true
+  graceMinutes: 60
+
+# HAP + prompt-injection live ONLY on the dedicated guardrails node
+# (g6.2xlarge machineset: label nodepool=guardrails, taint dedicated=guardrails:NoSchedule).
+# minReplicas 0 + 60min scale-down grace (patched on the KServe HPA after install).
+detectors:
+  hap:
+    minReplicas: 0
+    nodeSelector:
+      nodepool: guardrails
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: guardrails
+        effect: NoSchedule
+  promptInjection:
+    minReplicas: 0
+    nodeSelector:
+      nodepool: guardrails
+    tolerations:
+      - key: dedicated
+        operator: Equal
+        value: guardrails
+        effect: NoSchedule

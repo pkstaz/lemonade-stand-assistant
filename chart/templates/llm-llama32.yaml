@@ -69,7 +69,7 @@ spec:
   predictor:
     automountServiceAccountToken: false
     maxReplicas: 1
-    minReplicas: 0
+    minReplicas: 1
     model:
       args:
         - '--enable-auto-tool-choice'
@@ -88,8 +88,18 @@ spec:
           nvidia.com/gpu: '1'
       runtime: llama-32
       storageUri: 'oci://quay.io/redhat-ai-services/modelcar-catalog:llama-3.2-3b-instruct'
+    nodeSelector:
+{{- with (.Values.models.llm | default dict).nodeSelector }}
+{{ toYaml . | indent 8 }}
+{{- else }}
+      node-role.kubernetes.io/control-plane: ""
+{{- end }}
     tolerations:
+{{- with (.Values.models.llm | default dict).tolerations }}
+{{ toYaml . | indent 6 }}
+{{- else }}
       - effect: NoSchedule
         key: nvidia.com/gpu
         operator: Exists
+{{- end }}
 {{- end }}

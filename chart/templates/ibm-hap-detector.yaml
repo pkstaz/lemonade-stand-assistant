@@ -49,15 +49,15 @@ metadata:
   annotations:
     helm.sh/weight: "1"
     openshift.io/display-name: guardrails-detector-ibm-hap
+    serving.kserve.io/autoscalerClass: external
     serving.kserve.io/deploymentMode: RawDeployment
   name: guardrails-detector-ibm-hap
   labels:
     opendatahub.io/dashboard: 'true'
+    guardrails-detector: "true"
 spec:
   predictor:
     automountServiceAccountToken: false
-    maxReplicas: 1
-    minReplicas: 1
     model:
       modelFormat:
         name: guardrails-detector-huggingface
@@ -79,8 +79,26 @@ spec:
       storage:
         key: minio-data-connection-detector-models
         path: granite-guardian-hap-125m
-    {{- if .Values.detectors.hap.useGpu }}
+    minReplicas: {{ .Values.detectors.hap.minReplicas | default 0 }}
+    maxReplicas: 1
+    nodeSelector:
+{{- with (.Values.detectors.hap | default dict).nodeSelector }}
+{{ toYaml . | indent 6 }}
+{{- end }}
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                guardrails-detector: "true"
+            topologyKey: kubernetes.io/hostname
+    deploymentStrategy:
+      type: Recreate
     tolerations:
+{{- with (.Values.detectors.hap | default dict).tolerations }}
+{{ toYaml . | indent 6 }}
+{{- end }}
+    {{- if .Values.detectors.hap.useGpu }}
       - effect: NoSchedule
         key: nvidia.com/gpu
         operator: Exists

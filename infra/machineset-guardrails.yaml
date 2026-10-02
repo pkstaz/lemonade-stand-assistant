@@ -1,0 +1,89 @@
+apiVersion: machine.openshift.io/v1beta1
+kind: MachineSet
+metadata:
+  annotations:
+    capacity.cluster-autoscaler.kubernetes.io/labels: kubernetes.io/arch=amd64
+    machine.openshift.io/GPU: "1"
+    machine.openshift.io/memoryMb: "32768"
+    machine.openshift.io/vCPU: "8"
+  labels:
+    machine.openshift.io/cluster-api-cluster: ocp-96vs5
+  name: ocp-96vs5-worker-guardrails-us-east-2a
+  namespace: openshift-machine-api
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      machine.openshift.io/cluster-api-cluster: ocp-96vs5
+      machine.openshift.io/cluster-api-machineset: ocp-96vs5-worker-guardrails-us-east-2a
+  template:
+    metadata:
+      labels:
+        machine.openshift.io/cluster-api-cluster: ocp-96vs5
+        machine.openshift.io/cluster-api-machine-role: worker
+        machine.openshift.io/cluster-api-machine-type: worker
+        machine.openshift.io/cluster-api-machineset: ocp-96vs5-worker-guardrails-us-east-2a
+    spec:
+      lifecycleHooks: {}
+      metadata:
+        labels:
+          nodepool: guardrails
+      taints:
+        - key: dedicated
+          value: guardrails
+          effect: NoSchedule
+      providerSpec:
+        value:
+          ami:
+            id: ami-00c830a23b63d4db9
+          apiVersion: machine.openshift.io/v1beta1
+          blockDevices:
+          - ebs:
+              encrypted: true
+              iops: 0
+              kmsKey:
+                arn: ""
+              volumeSize: 300
+              volumeType: gp3
+          capacityReservationId: ""
+          credentialsSecret:
+            name: aws-cloud-credentials
+          deviceIndex: 0
+          iamInstanceProfile:
+            id: ocp-96vs5-worker-profile
+          instanceType: g6.2xlarge
+          kind: AWSMachineProviderConfig
+          metadata:
+          metadataServiceOptions: {}
+          placement:
+            availabilityZone: us-east-2a
+            region: us-east-2
+          securityGroups:
+          - filters:
+            - name: tag:Name
+              values:
+              - ocp-96vs5-node
+          - filters:
+            - name: tag:Name
+              values:
+              - ocp-96vs5-lb
+          subnet:
+            filters:
+            - name: tag:Name
+              values:
+              - ocp-96vs5-subnet-private-us-east-2a
+          tags:
+          - name: kubernetes.io/cluster/ocp-96vs5
+            value: owned
+          - name: Stack
+            value: project openshift-cluster-nzbcx
+          - name: config
+            value: openshift-cluster
+          - name: guid
+            value: nzbcx
+          - name: owner
+            value: unknown
+          - name: uuid
+            value: bc176eb5-6cf0-52c1-934a-4696bc0c5536
+          userDataSecret:
+            name: worker-user-data

@@ -51,15 +51,17 @@ metadata:
   annotations:
     helm.sh/weight: "1"
     openshift.io/display-name: prompt-injection-detector
+    serving.kserve.io/autoscalerClass: external
     serving.kserve.io/deploymentMode: RawDeployment
   name: prompt-injection-detector
   labels:
     opendatahub.io/dashboard: 'true'
+    guardrails-detector: "true"
 spec:
   predictor:
     automountServiceAccountToken: false
     maxReplicas: 1
-    minReplicas: 1
+    minReplicas: {{ .Values.detectors.promptInjection.minReplicas | default 0 }}
     model:
       modelFormat:
         name: guardrails-detector-huggingface
@@ -81,8 +83,24 @@ spec:
       storage:
         key: minio-data-connection-detector-models
         path: deberta-v3-base-prompt-injection-v2
-    {{- if .Values.detectors.promptInjection.useGpu }}
+    nodeSelector:
+{{- with (.Values.detectors.promptInjection | default dict).nodeSelector }}
+{{ toYaml . | indent 6 }}
+{{- end }}
+    affinity:
+      podAntiAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchLabels:
+                guardrails-detector: "true"
+            topologyKey: kubernetes.io/hostname
+    deploymentStrategy:
+      type: Recreate
     tolerations:
+{{- with (.Values.detectors.promptInjection | default dict).tolerations }}
+{{ toYaml . | indent 6 }}
+{{- end }}
+    {{- if .Values.detectors.promptInjection.useGpu }}
       - effect: NoSchedule
         key: nvidia.com/gpu
         operator: Exists

@@ -36,13 +36,6 @@ data:
           port: 8000
         chunker_id: sentence
         default_threshold: 0.5
-      prompt_injection:
-        type: text_contents
-        service:
-          hostname: {{ include "assistant.promptInjectionHostname" . }}
-          port: 8000
-        chunker_id: sentence
-        default_threshold: 0.5
       language_detection:
         type: text_contents
         service:

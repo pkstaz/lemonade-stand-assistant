@@ -1,0 +1,116 @@
+{{- $ns := include "assistant.namespace" . }}
+{{- if and (eq (include "assistant.deployLlm" .) "true") (.Values.idleScaler.enabled | default false) }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  namespace: {{ $ns }}
+  name: model-idle-scaler
+  labels:
+    app: model-idle-scaler
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: model-idle-scaler
+  labels:
+    app: model-idle-scaler
+rules:
+  - apiGroups: ["apps"]
+    resources: ["deployments", "deployments/scale"]
+    verbs: ["get", "list", "patch"]
+  - apiGroups: [""]
+    resources: ["services/proxy"]
+    verbs: ["get", "create"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "list", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: model-idle-scaler
+  labels:
+    app: model-idle-scaler
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: model-idle-scaler
+subjects:
+  - kind: ServiceAccount
+    name: model-idle-scaler
+    namespace: {{ $ns }}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  namespace: {{ $ns }}
+  name: model-idle-scaler
+  labels:
+    app: model-idle-scaler
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: model-idle-scaler
+        spec:
+          serviceAccountName: model-idle-scaler
+          restartPolicy: Never
+          containers:
+            - name: scaler
+              image: quay.io/openshift/origin-cli:latest
+              command:
+                - /bin/bash
+                - -ec
+                - |
+                  set -u
+                  NS="{{ $ns }}"
+                  GRACE=$(( {{ .Values.idleScaler.graceMinutes | default 60 }} * 60 ))
+                  MODELS="guardrails-detector-ibm-hap-predictor prompt-injection-detector-predictor"
+                  CM="model-idle-scaler-state"
+                  now=$(date +%s)
+
+                  # 1. Activity signal: sum guardrail_requests_total across every
+                  #    variant frontend app (label app.kubernetes.io/component=frontend).
+                  total=0
+                  apps=$(oc get deploy -A -l app.kubernetes.io/component=frontend -o jsonpath='{range .items[*]}{.metadata.namespace}/{.metadata.name}{" "}{end}' 2>/dev/null) || apps=""
+                  for app in $apps; do
+                    appns="${app%%/*}"; name="${app##*/}"
+                    m=$(oc get --raw "/api/v1/namespaces/${appns}/services/${name}:8080/proxy/metrics" 2>/dev/null \
+                        | grep -E '^guardrail_requests_total' | grep -v '^#' \
+                        | awk '{s+=$2} END {printf "%d", s+0}')
+                    total=$(( total + ${m:-0} ))
+                  done
+
+                  # 2. State: last counter value + last-active timestamp.
+                  prev=$(oc get cm "$CM" -n "$NS" -o jsonpath='{.data.total}' 2>/dev/null) || prev=""
+                  prev=${prev:-0}
+                  last_active=$(oc get cm "$CM" -n "$NS" -o jsonpath='{.data.last_active}' 2>/dev/null) || last_active=""
+                  last_active=${last_active:-$now}
+                  if [ "$total" -gt "$prev" ]; then last_active=$now; fi
+                  if ! oc get cm "$CM" -n "$NS" >/dev/null 2>&1; then
+                    oc create cm "$CM" -n "$NS"
+                  fi
+                  oc patch cm "$CM" -n "$NS" --type merge \
+                    -p "{\"data\":{\"total\":\"$total\",\"last_active\":\"$last_active\"}}" >/dev/null
+
+                  idle=$(( now - last_active ))
+                  echo "requests_total=$total prev=$prev idle_seconds=$idle grace=$GRACE"
+
+                  # 3. min=0 policy: scale models to 0 after the grace period of no traffic.
+                  if [ "$idle" -ge "$GRACE" ]; then
+                    for d in $MODELS; do
+                      replicas=$(oc get deploy "$d" -n "$NS" -o jsonpath='{.spec.replicas}' 2>/dev/null) || replicas=""
+                      if [ "${replicas:-1}" -gt 0 ]; then
+                        echo "scaling $d to 0 (idle for $idle seconds)"
+                        oc scale deploy "$d" -n "$NS" --replicas=0
+                      fi
+                    done
+                  fi
+{{- end }}
