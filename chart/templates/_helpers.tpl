@@ -140,15 +140,17 @@ true
 {{- end -}}
 
 {{/*
-LLM hostname for orchestrator
+LLM hostname for orchestrator.
+In-cluster LLMs are LLMInferenceServices: the workload Service is
+`<name>-kserve-workload-svc` and vLLM serves HTTPS on port 8000.
 */}}
 {{- define "assistant.llmHostname" -}}
 {{- if .Values.model.endpoint -}}
 {{- .Values.model.endpoint -}}
 {{- else if eq (include "assistant.sharedModelsEnabled" .) "true" -}}
-llama-32-predictor.{{ include "assistant.sharedModelsNamespace" . }}.svc.cluster.local
+llama-32-kserve-workload-svc.{{ include "assistant.sharedModelsNamespace" . }}.svc.cluster.local
 {{- else -}}
-llama-32-predictor
+llama-32-kserve-workload-svc
 {{- end -}}
 {{- end -}}
 
@@ -159,7 +161,7 @@ LLM port for orchestrator
 {{- if .Values.model.port -}}
 {{- .Values.model.port -}}
 {{- else -}}
-8080
+8000
 {{- end -}}
 {{- end -}}
 

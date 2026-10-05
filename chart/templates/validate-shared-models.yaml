@@ -7,7 +7,7 @@ Uses lookup against the live API. Skipped during `helm template` / client dry-ru
 {{- $live := lookup "v1" "Service" "default" "kubernetes" }}
 {{- if $live }}
 {{- $owner := include "assistant.sharedModelsNamespace" . }}
-{{- $llm := lookup "serving.kserve.io/v1beta1" "InferenceService" $owner "llama-32" }}
+{{- $llm := lookup "serving.kserve.io/v1alpha1" "LLMInferenceService" $owner "llama-32" }}
 {{- $hap := lookup "serving.kserve.io/v1beta1" "InferenceService" $owner "guardrails-detector-ibm-hap" }}
 {{- $pi := lookup "serving.kserve.io/v1beta1" "InferenceService" $owner "prompt-injection-detector" }}
 {{- $missing := list }}
@@ -15,7 +15,7 @@ Uses lookup against the live API. Skipped during `helm template` / client dry-ru
 {{- if not $hap }}{{- $missing = append $missing "guardrails-detector-ibm-hap" }}{{- end }}
 {{- if not $pi }}{{- $missing = append $missing "prompt-injection-detector" }}{{- end }}
 {{- if gt (len $missing) 0 }}
-{{- fail (printf "models.shared.enabled=true but missing InferenceService(s) in namespace %q: %s. Install the original lemonade stack first:\n  helm upgrade --install lemonade-stand-assistant ./chart --create-namespace -n %s -f chart/values-lemonade.yaml\nThen verify:\n  oc get inferenceservice -n %s" $owner (join ", " $missing) $owner $owner) }}
+{{- fail (printf "models.shared.enabled=true but missing model(s) in namespace %q: %s. Install the original lemonade stack first:\n  helm upgrade --install lemonade-stand-assistant ./chart --create-namespace -n %s -f chart/values-lemonade.yaml\nThen verify:\n  oc get llminferenceservice,inferenceservice -n %s" $owner (join ", " $missing) $owner $owner) }}
 {{- end }}
 {{- end }}
 {{- end }}
