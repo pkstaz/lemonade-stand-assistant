@@ -17,17 +17,29 @@ data:
             port: 8085
     openai: 
       service:
+{{- if .Values.models.llm.maasGatewayHost }}
+        # Through the MaaS gateway: auth + subscription metering. HTTP:80 keeps
+        # the orchestrator's rustls client on HTTP/1.1 (h2 upstreams panic:
+        # hyper keep-alive without a timer in fms-orchestr8 0.18.x).
+        hostname: {{ .Values.models.llm.maasGatewayHost }}
+        port: 80
+        path_prefix: {{ include "assistant.llmMaasPathPrefix" . }}
+        api_token: MAAS_API_KEY
+{{- else }}
+        # Direct to the LLMInferenceService workload Service (HTTPS, KServe
+        # self-signed certs on the container port, not Service port 80).
+        # tls.insecure skips cert verification; cert_path is required by the
+        # orchestrator even when unused.
         hostname: {{ include "assistant.llmHostname" . }}
-        # LLMInferenceService workload Services serve HTTPS (KServe-injected
-        # self-signed certs) on the container port (llama 8000, HAP/PI 8000),
-        # not Service port 80. tls.insecure skips cert verification; cert_path
-        # is required by the orchestrator even when unused.
         port: {{ include "assistant.llmPort" . }}
         tls: kserve-workload
+{{- end }}
+{{- if not .Values.models.llm.maasGatewayHost }}
     tls:
       kserve-workload:
         cert_path: /etc/pki/tls/certs/ca-bundle.crt
         insecure: true
+{{- end }}
     detectors:
       regex_competitor:
         type: text_contents

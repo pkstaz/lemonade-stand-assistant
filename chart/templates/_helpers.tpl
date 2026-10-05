@@ -190,3 +190,23 @@ prompt-injection-detector-predictor.{{ include "assistant.sharedModelsNamespace"
 prompt-injection-detector-predictor
 {{- end -}}
 {{- end -}}
+
+{{/*
+Namespace where the llama-32 LLMInferenceService lives:
+this release when deploying the LLM in-cluster, the shared namespace otherwise.
+*/}}
+{{- define "assistant.llmNamespace" -}}
+{{- if eq (include "assistant.deployLlm" .) "true" -}}
+{{ include "assistant.namespace" . }}
+{{- else -}}
+{{ include "assistant.sharedModelsNamespace" . }}
+{{- end -}}
+{{- end -}}
+
+{{/*
+MaaS gateway path prefix for the llama-32 LLMInferenceService.
+The LLMInferenceService routes are published under /<namespace>/<name>.
+*/}}
+{{- define "assistant.llmMaasPathPrefix" -}}
+/{{ include "assistant.llmNamespace" . }}/llama-32
+{{- end -}}

@@ -28,6 +28,16 @@ model: {}
 # Shared models across variants (avoid deploying LLM/HAP/PI/MinIO twice)
 # Keep Lingua local per variant (language differs).
 models:
+  # Route LLM calls through the MaaS gateway (single-model serving platform)
+  # instead of the in-cluster workload Service. When set, the orchestrator
+  # authenticates with the MaaS API key below (subscription metering applies).
+  llm:
+    # MaaS gateway FQDN, e.g. maas.apps.<cluster-domain>. Empty = direct TLS
+    # to the LLMInferenceService workload Service.
+    maasGatewayHost: ""
+    # MaaS API key bound to the subscription that includes llama-32.
+    # Created as Secret `maas-api-key` in the release namespace when set.
+    maasApiKey: ""
   # Explicit overrides (optional). When shared.enabled=true these become false.
   # deployLlm: true
   # deployDetectors: true
@@ -35,7 +45,7 @@ models:
     enabled: false
     # Namespace that already runs lemonade (owns llama + detectors + minio)
     namespace: lemonade-stand-assistant
-    # Fail helm install if owner InferenceServices are missing (live cluster only)
+    # Fail helm install if owner models are missing (live cluster only)
     validate: true
 
 # Detector configuration

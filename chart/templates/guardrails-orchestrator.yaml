@@ -1,6 +1,21 @@
 {{- $ns := include "assistant.namespace" . }}
 ---
 ---
+{{- if .Values.models.llm.maasGatewayHost }}
+{{- if .Values.models.llm.maasApiKey }}
+apiVersion: v1
+kind: Secret
+metadata:
+  namespace: {{ $ns }}
+  name: maas-api-key
+  labels:
+    app: guardrails-orchestrator
+type: Opaque
+stringData:
+  maas-api-key: {{ .Values.models.llm.maasApiKey | quote }}
+---
+{{- end }}
+{{- end }}
 apiVersion: trustyai.opendatahub.io/v1alpha1
 kind: GuardrailsOrchestrator
 metadata:
@@ -15,3 +30,12 @@ spec:
   otelExporter:
     otlpProtocol: grpc
   replicas: 1
+{{- if .Values.models.llm.maasGatewayHost }}
+  env:
+    - name: MAAS_API_KEY
+      valueFrom:
+        secretKeyRef:
+          name: maas-api-key
+          key: maas-api-key
+          optional: true
+{{- end }}
